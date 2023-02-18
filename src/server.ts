@@ -1,6 +1,8 @@
 import http from 'http';
-import { Server } from 'socket.io';
 import express from 'express';
+import { Server } from 'socket.io';
+import { instrument } from '@socket.io/admin-ui';
+// import { WebSocketServer } from 'ws';
 
 const app = express();
 
@@ -13,21 +15,56 @@ app.get('/*', (req, res) => res.redirect('/')); //redirect해주는 문장
 const handleListen = () => console.log(`Listening on http://127.0.0.1:3001`);
 
 const server = http.createServer(app); //http서버에 access
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: ['https://admin.socket.io'],
+    credentials: true,
+  },
+});
+instrument(io, { auth: false });
 
-io.on('connection', (socket) => {
+function publicRooms() {
+  const {
+    sockets: {
+      adapter: { sids, rooms },
+    },
+  } = io;
+  const publicRooms: any[] = [];
+  rooms.forEach((_, key: string) => {
+    if (sids.get(key) === undefined) publicRooms.push(key);
+  });
+  return publicRooms;
+}
+
+function countPeople(roomName: string) {
+  return io.sockets.adapter.rooms.get(roomName)?.size;
+}
+
+io.on('connection', (socket: any) => {
+  socket['nickname'] = '알 수 없음';
+  socket.onAny((event: any) => {});
+  io.sockets.emit('room_change', publicRooms());
   socket.on('enter_room', (roomName: any, done: Function) => {
     //보내주는 변수들 모두 받을 수 있음 변수 갯수만 변경하면 됨
     socket.join(roomName);
-    done();
-    socket.to(roomName).emit('welcome');
-    socket.on('disconnecting', () => {
-      socket.rooms.forEach((room) => socket.to(room).emit('bye'));
-    });
+    done(countPeople(roomName));
+    socket.to(roomName).emit('welcome', socket.nickname, countPeople(roomName));
+    io.sockets.emit('room_change', publicRooms());
+  });
+  socket.on('disconnecting', () => {
+    socket.rooms.forEach((room: any) =>
+      socket.to(room).emit('bye', socket.nickname, countPeople(room) - 1)
+    );
+  });
+  socket.on('disconnect', () => {
+    io.sockets.emit('room_change', publicRooms());
   });
   socket.on('new_message', (msg: any, roomName: any, done: Function) => {
-    socket.to(roomName).emit('new_message', `Someone: ${msg}`);
+    socket.to(roomName).emit('new_message', `${socket['nickname']}: ${msg}`);
     done();
+  });
+  socket.on('nickname', (nickname: any) => {
+    socket['nickname'] = nickname;
   });
 });
 /*
