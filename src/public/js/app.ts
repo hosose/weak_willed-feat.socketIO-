@@ -6,6 +6,7 @@ const room: any = document.getElementById('room');
 const nameForm = welcome.querySelector('#name');
 const save: any = document.getElementById('save');
 const saved: any = document.getElementById('saved');
+const rooms: any = document.getElementById('rooms');
 
 room.hidden = true;
 save.hidden = false;
@@ -71,6 +72,16 @@ function handleRoomSubmit(event: any) {
   input.value = '';
 }
 
+function handleRoomClick(event: any) {
+  event.preventDefault();
+  socket.emit(
+    'enter_room',
+    event.target.textContent,
+    showRoom //함수를 보내려면 마지막에 작성해야함
+  );
+  roomName = event.target.textContent;
+}
+
 form?.addEventListener('submit', handleRoomSubmit);
 nameForm.addEventListener('submit', handleNicknameSubmit);
 
@@ -85,16 +96,20 @@ socket.on('bye', (user: any, newCount: number) => {
   h3.innerText = `Number of People: ${newCount}`;
 });
 socket.on('new_message', addMessage);
-socket.on('room_change', (rooms: any[]) => {
+socket.on('room_change', (roomNames: any[]) => {
   let roomList = welcome.querySelector('ul');
   roomList.innerText = '';
-  if (rooms.length === 0) {
+  if (roomNames.length === 0) {
     return;
   }
-  rooms.forEach((room) => {
+  roomNames.forEach((room) => {
     const li = document.createElement('li');
-    li.innerText = room;
-    roomList.append(li);
+    const roomBtn = document.createElement('button');
+    li.id = room;
+    roomBtn.textContent = room;
+    li.append(roomBtn);
+    rooms.appendChild(li);
+    roomBtn?.addEventListener('click', handleRoomClick);
   });
 });
 
